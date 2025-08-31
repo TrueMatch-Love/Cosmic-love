@@ -1,83 +1,71 @@
 import express from "express";
+import bodyParser from "body-parser";
 import cors from "cors";
-import dotenv from "dotenv";
-import fetch from "node-fetch";
-
-dotenv.config();
+import OpenAI from "openai";
 
 const app = express();
-const PORT = process.env.PORT || 3000;
-
 app.use(cors());
-app.use(express.json({ limit: "1mb" }));
+app.use(bodyParser.json());
 
-app.get("/", (_req, res) => res.type("text").send("OK"));
-app.get("/health", (_req, res) => res.json({ ok: true }));
+const port = process.env.PORT || 5000;
 
-function smartFallback(text = "") {
-  const t = (text||"").toLowerCase().trim();
-  if (/^(hi|hello|hey)\b/.test(t)) return "Hi! Kaise ho? 😊";
-  if (/how are you|kya haal/.test(t)) return "Main theek hoon! Tum kaise ho?";
-  if (/sorry|maaf/.test(t)) return "Short & sincere apology works best.";
-  if (/breakup|toot/.test(t)) return "Take care of yourself, talk to a friend, and be gentle with emotions.";
-  if (/reply|message/.test(t)) return 'Try: "Thanks — I’ll call you when free 😊"';
-  return "Thoda aur batao, fir main better help kar paunga 💖";
-}
+// ✅ Your real API key (make sure it's in Render env vars)
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
+// Route for testing
+app.get("/", (req, res) => {
+  res.send("Cosmic Love Chat Backend is running 💖");
+});
+
+// Chat endpoint
 app.post("/api/chat", async (req, res) => {
   try {
-    const { message } = req.body || {};
-    if (!message) return res.status(400).json({ error: "message required" });
+    const userMessage = req.body.message || "";
 
-    let reply;
-    if (process.env.OPENAI_API_KEY) {
-      const r = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "gpt-4o-mini",
-          messages: [
-            { role: "system", content: "You are a warm, concise love & relationship assistant. Use brief Hinglish-friendly replies." },
-            { role: "user", content: message }
-          ],
-          temperature: 0.6,
-          max_tokens: 220
-        }),
-      });
-
-      const data = await r.json();
-      if (!r.ok) {
-        console.error("OpenAI error:", data);
-        reply = smartFallback(message);
-      } else {
-        reply = data?.choices?.[0]?.message?.content?.trim() || smartFallback(message);
-      }
-    } else {
-      reply = smartFallback(message);
+    if (!userMessage.trim()) {
+      return res.json({ reply: "Please write something, my dear 💌" });
     }
 
-    res.json({ reply });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "server_error" });
-  }
-});
-
-app.post("/forward", async (req, res) => {
-  try {
-    await fetch("https://formspree.io/f/xblkbnnq", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(req.body),
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini", // ✅ lightweight + smart
+      messages: [
+        {
+          role: "system",
+          content: `You are "Cosmic Love Assistant" 💖 — 
+          a friendly AI that helps users with relationship advice, 
+          romantic message suggestions, and love guidance.
+          - Keep answers SHORT (1–3 lines).
+          - Always be polite, warm, and supportive.
+          - If user pastes a chat/message from their partner, 
+            suggest a caring reply they can send back.
+          - If greeting (hi, hello), respond with a sweet greeting back.
+          - Never give robotic answers, always sound like a close friend.`,
+        },
+        {
+          role: "user",
+          content: userMessage,
+        },
+      ],
+      temperature: 0.8, // more natural
+      max_tokens: 120,
     });
-    res.json({ success: true });
-  } catch (err) {
-    console.error("forward error", err);
-    res.status(500).json({ success: false });
+
+    const aiReply =
+      completion.choices[0]?.message?.content ||
+      "Sorry, I couldn’t think of a reply right now 💕";
+
+    res.json({ reply: aiReply });
+  } catch (error) {
+    console.error("OpenAI Error:", error.message);
+    res.status(500).json({
+      reply:
+        "Oops 💔! I'm having trouble connecting right now. Try again in a moment.",
+    });
   }
 });
 
-app.listen(PORT, () => console.log("Server listening on", PORT));
+app.listen(port, () => {
+  console.log(`🚀 Cosmic Love backend running on port ${port}`);
+});
